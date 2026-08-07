@@ -1,0 +1,40 @@
+# =============================================================================
+# NEXUS EDU — Python Dependencies
+# =============================================================================
+
+# ── Core Framework & API ─────────────────────────────────────────
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.9.0
+email-validator>=2.1.0
+pydantic-settings>=2.5.0
+python-dotenv>=1.0.0
+passlib[bcrypt]>=1.7.4
+PyJWT>=2.8.0
+python-multipart>=0.0.9
+
+# ── RAG: Document Loading ───────────────────────────────────────
+PyMuPDF>=1.24.0
+python-docx>=1.1.0
+python-pptx>=1.0.0
+
+# ── RAG: Embeddings & Reranking ─────────────────────────────────
+sentence-transformers>=3.0.0
+
+# ── RAG: Vector Store ───────────────────────────────────────────
+chromadb>=0.5.0
+
+# ── RAG: BM25 Sparse Retrieval ──────────────────────────────────
+rank-bm25>=0.2.2
+
+# ── LLM Core (Structured Outputs & Routing) ─────────────────────
+groq>=0.11.0
+instructor>=1.6.0
+tenacity>=8.3.0
+
+# ── Database & ORM ──────────────────────────────────────────────
+sqlalchemy[asyncio]>=2.0.0
+alembic>=1.13.0
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.0
+youtube-transcript-api>=0.6.0

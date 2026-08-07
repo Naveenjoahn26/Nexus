@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: nexus-edu-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_NAME
+        value: NEXUS_EDU
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: UPLOAD_DIR
+        value: app/storage/uploads
+      - key: GENERATED_DIR
+        value: app/storage/generated
+      - key: TEMP_DIR
+        value: app/storage/temp
+      - key: CHROMA_PERSIST_DIR
+        value: app/storage/chromadb
+      # ⬇️ Set these as SECRET environment variables in the Render dashboard:
+      # DATABASE_URL       → your Neon/Supabase async URL
+      # DATABASE_URL_SYNC  → your Neon/Supabase sync URL
+      # JWT_SECRET_KEY     → a long random secret string
+      # GROQ_API_KEY       → your Groq API key

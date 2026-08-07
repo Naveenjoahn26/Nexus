@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment files (NEVER commit these)
+.env
+*.env.local
+*.env.production
+
+# Logs
+*.log
+debug-*.log
+flake8_report.txt
+
+# Alembic
+alembic/versions/__pycache__/
+
+# Storage (user uploads, generated files — don't commit)
+backend/app/storage/uploads/
+backend/app/storage/generated/
+backend/app/storage/temp/
+backend/app/storage/chromadb/
+
+# Test files
+test.pdf
+dummy_genetics.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/settings.json
+.cursor/
+
+# Node
+node_modules/
+.npm/
+
+# Vite / Build output
+dist/
+.cache/
