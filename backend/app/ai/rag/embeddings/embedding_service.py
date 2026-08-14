@@ -73,15 +73,36 @@ class EmbeddingService:
         return self._model
 
     def _embed_sync(self, texts: list[str]) -> list[list[float]]:
-        """Synchronous batch embedding with L2 normalization."""
-        model = self._get_model()
-        embeddings = model.encode(
-            texts,
-            batch_size=self._batch_size,
-            show_progress_bar=False,
-            normalize_embeddings=True,  # L2 normalize for cosine similarity
-        )
-        return embeddings.tolist()
+        """Synchronous batch embedding with L2 normalization and RAM fallback."""
+        try:
+            model = self._get_model()
+            embeddings = model.encode(
+                texts,
+                batch_size=self._batch_size,
+                show_progress_bar=False,
+                normalize_embeddings=True,
+            )
+            return embeddings.tolist()
+        except Exception as exc:
+            logger.warning(
+                "Primary embedding model unavailable or OOM (%s). Using lightweight fallback embedder.",
+                exc,
+            )
+            return [self._fallback_embed(t) for t in texts]
+
+    def _fallback_embed(self, text: str) -> list[float]:
+        """Fast 384-dimensional deterministic feature vector for memory-constrained environments."""
+        import hashlib
+        import math
+
+        vec = [0.0] * self._dimension
+        words = text.lower().split()
+        for idx, word in enumerate(words):
+            h = int(hashlib.md5(word.encode("utf-8")).hexdigest(), 16)
+            dim_idx = h % self._dimension
+            vec[dim_idx] += 1.0 / (1.0 + math.log(idx + 1))
+        norm = math.sqrt(sum(x * x for x in vec)) or 1.0
+        return [x / norm for x in vec]
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """

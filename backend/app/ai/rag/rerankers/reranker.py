@@ -89,27 +89,28 @@ class Reranker:
         chunks: list[RetrievedChunk],
         top_k: int,
     ) -> list[RetrievedChunk]:
-        """Synchronous cross-encoder scoring."""
-        model = self._get_model()
+        """Synchronous cross-encoder scoring with fallback."""
+        try:
+            model = self._get_model()
+            pairs = [[query, chunk.content] for chunk in chunks]
+            scores = model.predict(pairs, show_progress_bar=False)
 
-        # Cross-encoder takes (query, document) pairs.
-        pairs = [[query, chunk.content] for chunk in chunks]
-        scores = model.predict(pairs, show_progress_bar=False)
-
-        # Sort by cross-encoder score descending.
-        scored = sorted(
-            zip(chunks, scores), key=lambda x: x[1], reverse=True
-        )
-
-        return [
-            RetrievedChunk(
-                chunk_id=chunk.chunk_id,
-                content=chunk.content,
-                score=float(score),
-                metadata=chunk.metadata,
+            scored = sorted(
+                zip(chunks, scores), key=lambda x: x[1], reverse=True
             )
-            for chunk, score in scored[:top_k]
-        ]
+
+            return [
+                RetrievedChunk(
+                    chunk_id=chunk.chunk_id,
+                    content=chunk.content,
+                    score=float(score),
+                    metadata=chunk.metadata,
+                )
+                for chunk, score in scored[:top_k]
+            ]
+        except Exception as exc:
+            logger.warning("Cross-encoder reranker unavailable (%s). Returning top candidate chunks.", exc)
+            return chunks[:top_k]
 
     # ── Reranking + MMR ──────────────────────────────────────────
 

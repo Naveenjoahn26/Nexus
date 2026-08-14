@@ -33,12 +33,30 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan context: auto-creates DB tables on startup."""
+    try:
+        from app.database.database import get_engine
+        from app.database.base import Base
+        import app.models  # Register all ORM models
+        engine = get_engine()
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables verified/created successfully.")
+    except Exception as exc:
+        logger.warning("Database table auto-creation skipped/failed: %s", exc)
+    yield
+
 settings = get_settings()
 
 app = FastAPI(
     title=settings.app_name,
     description="NEXUS EDU Backend API",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # ── Middlewares ──────────────────────────────────────────────────
