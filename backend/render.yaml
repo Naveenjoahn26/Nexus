@@ -25,6 +25,8 @@ services:
         value: app/storage/temp
       - key: CHROMA_PERSIST_DIR
         value: app/storage/chromadb
+      - key: CORS_ORIGINS
+        value: https://nexus-ai-a1-cmi1.onrender.com,http://localhost:5173,http://127.0.0.1:5173
       # ⬇️ Set these as SECRET environment variables in the Render dashboard:
       # DATABASE_URL       → your Neon/Supabase async URL
       # DATABASE_URL_SYNC  → your Neon/Supabase sync URL

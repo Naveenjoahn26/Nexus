@@ -30,53 +30,11 @@ function RegisterPage() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // #region agent log
-    fetch("http://127.0.0.1:7777/ingest/e89b92b7-5bea-457e-bc00-e666afa6c6eb", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "74d681" },
-      body: JSON.stringify({
-        sessionId: "74d681",
-        hypothesisId: "D",
-        location: "register.tsx:onSubmit:entry",
-        message: "frontend register submit",
-        data: { email, passwordLen: password.length, apiBase: typeof window !== "undefined" ? window.localStorage.getItem("nexus_api_base") : null },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     try {
       await register({ email, full_name: fullName, password });
-      // #region agent log
-      fetch("http://127.0.0.1:7777/ingest/e89b92b7-5bea-457e-bc00-e666afa6c6eb", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "74d681" },
-        body: JSON.stringify({
-          sessionId: "74d681",
-          hypothesisId: "E",
-          location: "register.tsx:onSubmit:success",
-          message: "register and auto-login succeeded",
-          data: { email },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       toast.success("Account created — welcome.");
       navigate({ to: "/dashboard" });
     } catch (err) {
-      // #region agent log
-      fetch("http://127.0.0.1:7777/ingest/e89b92b7-5bea-457e-bc00-e666afa6c6eb", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "74d681" },
-        body: JSON.stringify({
-          sessionId: "74d681",
-          hypothesisId: "D",
-          location: "register.tsx:onSubmit:error",
-          message: "register failed on frontend",
-          data: { email, passwordLen: password.length, error: (err as Error).message },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       toast.error((err as Error).message);
     } finally {
       setLoading(false);

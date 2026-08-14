@@ -1,13 +1,16 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
-const DEFAULT_BASE = "http://localhost:8000";
+const DEFAULT_BASE = "https://nexus-ai-b1gb.onrender.com";
 
 export function getApiBase(): string {
   if (typeof window !== "undefined") {
     const stored = window.localStorage.getItem("nexus_api_base");
     if (stored) return stored.replace(/\/$/, "");
   }
-  const env = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? DEFAULT_BASE;
+  const env =
+    (import.meta.env.VITE_API_URL as string | undefined) ??
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+    DEFAULT_BASE;
   return env.replace(/\/$/, "");
 }
 
@@ -31,6 +34,7 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  config.baseURL = `${getApiBase()}/api/v1`;
   const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

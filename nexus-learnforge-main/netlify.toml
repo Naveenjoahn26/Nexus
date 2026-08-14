@@ -1,24 +1,38 @@
 [build]
   command = "npm install && npm run build"
-  publish = "dist"
+  publish = "dist/client"
+
+[build.environment]
+  VITE_API_BASE_URL = "https://nexus-ai-b1gb.onrender.com"
+  NITRO_PRESET = "netlify"
 
 [dev]
   command = "npm run dev"
   port = 3000
 
+# ---------------------------------------------------------------------------
+# Serverless Function (Node.js) — handles all SSR routes.
+# The TanStack Start server bundle uses node:async_hooks (AsyncLocalStorage)
+# which requires the Node.js runtime — NOT Deno/edge.
+# Netlify serves static files from dist/client first; only HTML page routes
+# reach this function.
+# ---------------------------------------------------------------------------
+[functions]
+  node_bundler = "esbuild"
+
+# ---------------------------------------------------------------------------
+# API proxy redirects — force=true so they run BEFORE the SSR function.
+# The SSR function has config.path="/*" so it catches everything,
+# but force=true redirects come first in Netlify's routing order.
 [[redirects]]
   from = "/api/*"
-  to = "https://your-render-backend-url.onrender.com/api/:splat"
+  to = "https://nexus-ai-b1gb.onrender.com/api/:splat"
   status = 200
   force = true
 
 [[redirects]]
   from = "/youtube/*"
-  to = "https://your-render-backend-url.onrender.com/youtube/:splat"
+  to = "https://nexus-ai-b1gb.onrender.com/youtube/:splat"
   status = 200
   force = true
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
