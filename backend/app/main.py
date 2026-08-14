@@ -33,21 +33,25 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import asyncio
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan context: auto-creates DB tables on startup."""
-    try:
-        from app.database.database import get_engine
-        from app.database.base import Base
-        import app.models  # Register all ORM models
-        engine = get_engine()
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables verified/created successfully.")
-    except Exception as exc:
-        logger.warning("Database table auto-creation skipped/failed: %s", exc)
+    """Application lifespan context: auto-creates DB tables asynchronously without blocking health checks."""
+    async def _init_db():
+        try:
+            from app.database.database import get_engine
+            from app.database.base import Base
+            import app.models  # Register all ORM models
+            engine = get_engine()
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database tables verified/created successfully.")
+        except Exception as exc:
+            logger.warning("Database table auto-creation skipped/failed: %s", exc)
+
+    asyncio.create_task(_init_db())
     yield
 
 settings = get_settings()
