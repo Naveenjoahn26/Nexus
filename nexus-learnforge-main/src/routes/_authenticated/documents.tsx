@@ -25,14 +25,24 @@ function DocumentsPage() {
   const [dragOver, setDragOver] = useState(false);
   const [uploaded, setUploaded] = useState<Array<{ id: string; filename: string; chunks?: number }>>([]);
 
-  // Note: the FRD lists /documents/upload and DELETE /documents/{id} but no list
-  // endpoint. We keep an ephemeral in-page list of the docs the user just added.
-  useQuery({ queryKey: ["docs-noop"], queryFn: async () => null, staleTime: Infinity });
+  const { data: remoteDocs = [] } = useQuery({
+    queryKey: ["documents-list"],
+    queryFn: async () => {
+      try {
+        const res = await uploadApi.listDocs();
+        return Array.isArray(res) ? res : [];
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 5000,
+  });
 
   const upload = useMutation({
     mutationFn: (f: File) => uploadApi.uploadFile(f),
     onSuccess: (d) => {
-      setUploaded((u) => [{ id: d.id, filename: d.filename, chunks: d.chunks }, ...u]);
+      qc.invalidateQueries({ queryKey: ["documents-list"] });
+      setUploaded((u) => [{ id: d.id, filename: d.filename, chunks: d.chunks ?? (d as any).chunks_indexed }, ...u]);
       toast.success(`Indexed: ${d.filename}`);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -42,7 +52,7 @@ function DocumentsPage() {
     mutationFn: (id: string) => uploadApi.removeFile(id),
     onSuccess: (_r, id) => {
       setUploaded((u) => u.filter((d) => d.id !== id));
-      qc.invalidateQueries({ queryKey: ["docs-noop"] });
+      qc.invalidateQueries({ queryKey: ["documents-list"] });
       toast.success("Removed.");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -52,6 +62,11 @@ function DocumentsPage() {
     if (!files) return;
     Array.from(files).forEach((f) => upload.mutate(f));
   };
+
+  const allDocs = [
+    ...uploaded,
+    ...remoteDocs.filter((r) => !uploaded.some((u) => u.id === r.id)),
+  ];
 
   return (
     <div className="space-y-8">
@@ -102,14 +117,14 @@ function DocumentsPage() {
       )}
 
       <section>
-        <h2 className="mb-3 text-sm uppercase tracking-widest text-muted-foreground">Recent uploads</h2>
-        {uploaded.length === 0 ? (
+        <h2 className="mb-3 text-sm uppercase tracking-widest text-muted-foreground">Your uploaded sources</h2>
+        {allDocs.length === 0 ? (
           <div className="glass rounded-2xl p-6 text-sm text-muted-foreground">
-            Uploads from this session will appear here.
+            No documents uploaded yet. Drop files above to populate your RAG pipeline.
           </div>
         ) : (
           <ul className="space-y-2">
-            {uploaded.map((d) => (
+            {allDocs.map((d) => (
               <motion.li
                 key={d.id}
                 initial={{ opacity: 0, x: -8 }}

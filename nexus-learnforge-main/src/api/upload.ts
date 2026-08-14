@@ -9,4 +9,5 @@ export const upload = {
     return apiClient.post<Document, Document>("/documents/upload", fd);
   },
   removeFile: (id: string) => apiClient.delete<{ success: boolean }, { success: boolean }>(`/documents/${id}`),
+  listDocs: () => apiClient.get<Document[], Document[]>("/documents"),
 };

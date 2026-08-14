@@ -90,10 +90,45 @@ async def upload_document(
 
     return StandardResponse(
         data=UploadResponse(
+            id=document_id,
             filename=file.filename or "unknown",
             status="indexed",
             chunks_indexed=result.chunk_count,
+            chunks=result.chunk_count,
         )
+    )
+
+
+@router.get("", response_model=StandardResponse[list[dict]])
+async def list_documents(
+    user: RequireActiveUser,
+    workspace_id: UserWorkspace,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """List all uploaded documents for your active workspace."""
+    from sqlalchemy import select
+    from app.models.document import Document
+
+    stmt = (
+        select(Document)
+        .where(
+            Document.course_id == workspace_id,
+            Document.is_deleted == False,
+        )
+        .order_by(Document.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    docs = result.scalars().all()
+    return StandardResponse(
+        data=[
+            {
+                "id": str(doc.id),
+                "filename": doc.original_filename,
+                "chunks": doc.chunk_count,
+                "status": doc.ingestion_status,
+            }
+            for doc in docs
+        ]
     )
 
 
@@ -103,7 +138,20 @@ async def delete_document(
     user: RequireActiveUser,
     workspace_id: UserWorkspace,
     pipeline=Depends(get_rag_pipeline),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Delete one of your documents from the index."""
     await pipeline.delete_document(document_id, str(workspace_id))
+    from sqlalchemy import select
+    from app.models.document import Document
+    try:
+        doc_uuid = uuid.UUID(document_id)
+        stmt = select(Document).where(Document.id == doc_uuid, Document.course_id == workspace_id)
+        res = await db.execute(stmt)
+        doc = res.scalar_one_or_none()
+        if doc:
+            doc.is_deleted = True
+            await db.commit()
+    except Exception:
+        pass
     return StandardResponse(data={"deleted": True})

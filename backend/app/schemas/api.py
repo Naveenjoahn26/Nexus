@@ -85,9 +85,11 @@ class CourseRead(BaseModel):
 
 class UploadResponse(BaseModel):
     """Response returned after a file is uploaded and ingestion begins."""
+    id: str | None = None
     filename: str
     status: str
     chunks_indexed: int = 0
+    chunks: int = 0
 
 # ── Generation Schemas ───────────────────────────────────────────
 
