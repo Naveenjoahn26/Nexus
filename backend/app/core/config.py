@@ -40,9 +40,26 @@ class Settings(BaseSettings):
     ]
 
     def get_cors_origins(self) -> list[str]:
+        defaults = [
+            "https://nexus-ai-1-cmi1.onrender.com",
+            "https://nexus-ai-a1-cmi1.onrender.com",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
         if isinstance(self.cors_origins, str):
-            return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
-        return list(self.cors_origins)
+            extra = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+            for item in extra:
+                if item not in defaults:
+                    defaults.append(item)
+            return defaults
+        elif isinstance(self.cors_origins, list):
+            for item in self.cors_origins:
+                if item not in defaults:
+                    defaults.append(item)
+            return defaults
+        return defaults
 
     # ── LLM Providers ───────────────────────────────────────────
     groq_api_key: str = ""
