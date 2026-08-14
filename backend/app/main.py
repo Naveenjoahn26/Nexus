@@ -46,10 +46,16 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.get_cors_origins(),
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "app": settings.app_name}
 
 @app.middleware("http")
 async def add_request_context_and_log(request: Request, call_next: Any) -> Any:

@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     # ── CORS ────────────────────────────────────────────────────
     cors_origins: str | list[str] = [
+        "https://nexus-ai-1-cmi1.onrender.com",
         "https://nexus-ai-a1-cmi1.onrender.com",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
