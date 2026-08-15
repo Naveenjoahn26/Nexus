@@ -51,7 +51,7 @@ class DOCXLoader(BaseLoader):
         doc = docx.Document(file_path)
         
         # Extract text from paragraphs
-        text_content = "\\n\\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+        text_content = "\n\n".join([p.text for p in doc.paragraphs if p.text.strip()])
 
         if not text_content.strip():
             logger.warning("No text extracted from DOCX: %s", file_path)

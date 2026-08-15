@@ -4,7 +4,17 @@ services:
     env: python
     region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
+    rootDir: backend
+    buildCommand: >
+      pip install -r requirements.txt &&
+      python -c "
+      from sentence_transformers import SentenceTransformer, CrossEncoder;
+      print('Downloading embedding model...');
+      SentenceTransformer('BAAI/bge-small-en-v1.5');
+      print('Downloading reranker model...');
+      CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2');
+      print('Models ready.')
+      "
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
@@ -28,8 +38,12 @@ services:
         value: app/storage/chromadb
       - key: CORS_ORIGINS
         value: https://nexus-ai-1-cmi1.onrender.com,https://nexus-ai-a1-cmi1.onrender.com,http://localhost:5173,http://127.0.0.1:5173
-      # ⬇️ Set these as SECRET environment variables in the Render dashboard:
-      # DATABASE_URL       → your Neon/Supabase async URL
-      # DATABASE_URL_SYNC  → your Neon/Supabase sync URL
-      # JWT_SECRET_KEY     → a long random secret string
-      # GROQ_API_KEY       → your Groq API key
+      # ── REQUIRED SECRETS — set these in the Render dashboard (Environment tab) ─
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_SYNC
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false

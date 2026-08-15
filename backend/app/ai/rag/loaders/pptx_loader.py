@@ -65,7 +65,7 @@ class PPTXLoader(BaseLoader):
                 if notes.strip():
                     slide_text.append(f"Notes: {notes}")
                     
-            content = "\\n\\n".join(slide_text).strip()
+            content = "\n\n".join(slide_text).strip()
             
             if content:
                 metadata = {
