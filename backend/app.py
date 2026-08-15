@@ -29,3 +29,7 @@ demo = gr.Interface(
 # This leaves your entire FastAPI app running at the root ("/") exactly like before!
 # All your /api/v1/... routes will work perfectly.
 app = gr.mount_gradio_app(fastapi_app, demo, path="/gradio")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=7860)
