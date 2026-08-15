@@ -38,3 +38,6 @@ alembic>=1.13.0
 asyncpg>=0.29.0
 psycopg2-binary>=2.9.0
 youtube-transcript-api>=0.6.0
+
+# -- Hugging Face Deployment -------------------------------------
+gradio>=4.0.0
