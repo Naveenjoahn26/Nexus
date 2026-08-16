@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     cors_origins: str | list[str] = [
         "https://nexus-ai-1-cmi1.onrender.com",
         "https://nexus-ai-a1-cmi1.onrender.com",
+        "https://nexus-ai-silk-ten.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
@@ -43,6 +44,7 @@ class Settings(BaseSettings):
         defaults = [
             "https://nexus-ai-1-cmi1.onrender.com",
             "https://nexus-ai-a1-cmi1.onrender.com",
+            "https://nexus-ai-silk-ten.vercel.app",
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             "http://localhost:3000",
