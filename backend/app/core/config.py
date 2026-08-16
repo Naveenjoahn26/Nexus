@@ -63,6 +63,7 @@ class Settings(BaseSettings):
 
     # ── LLM Providers ───────────────────────────────────────────
     groq_api_key: str = ""
+    hf_token: str = ""
 
     # ── Embedding Model ─────────────────────────────────────────
     embedding_model_name: str = "BAAI/bge-small-en-v1.5"

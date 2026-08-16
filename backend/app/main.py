@@ -56,42 +56,7 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning("Database table auto-creation skipped/failed: %s", exc)
 
-    async def _prewarm_models():
-        """Download + load embedding and reranker models at startup.
-
-        On Render (and any cold-start environment) sentence-transformers models
-        are fetched from HuggingFace on first use (~130 MB + ~120 MB).  That
-        download happens synchronously inside the first upload/chat request,
-        which causes Cloudflare to return a 502 because the response never
-        arrives within its 30-second window.
-
-        By loading the models here — in a background task that doesn't block
-        startup — the worker is ready before the first client request reaches
-        the embedding step.
-        """
-        import asyncio
-        try:
-            logger.info("Pre-warming embedding model …")
-            from app.ai.rag.embeddings.embedding_service import EmbeddingService
-            embedder = EmbeddingService(settings)
-            # _get_model() is synchronous (threading.Lock); run in executor so we
-            # don't block the event loop while the model downloads.
-            await asyncio.to_thread(embedder._get_model)
-            logger.info("Embedding model ready.")
-        except Exception as exc:
-            logger.warning("Embedding model pre-warm failed (will retry on first use): %s", exc)
-
-        try:
-            logger.info("Pre-warming reranker model …")
-            from app.ai.rag.rerankers.reranker import Reranker
-            reranker = Reranker(settings)
-            await asyncio.to_thread(reranker._get_model)
-            logger.info("Reranker model ready.")
-        except Exception as exc:
-            logger.warning("Reranker model pre-warm failed (will retry on first use): %s", exc)
-
     asyncio.create_task(_init_db())
-    asyncio.create_task(_prewarm_models())
     yield
 
 

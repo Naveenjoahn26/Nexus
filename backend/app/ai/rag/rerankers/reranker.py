@@ -2,30 +2,19 @@
 NEXUS EDU — Cross-Encoder Reranker + MMR Diversity Selection.
 
 Two-stage post-retrieval refinement:
-  1. Cross-encoder reranking — scores each (query, chunk) pair jointly
-     for much higher precision than bi-encoder similarity.
-  2. MMR selection — ensures the final chunk set is diverse, preventing
-     redundant information from wasting LLM context tokens.
-
-The cross-encoder is lazy-loaded and thread-safe (same pattern as
-the embedding service). MMR uses pre-computed embeddings to measure
-inter-chunk similarity.
+  1. Cross-encoder reranking — scores each (query, chunk) pair jointly. Offloaded to Hugging Face API.
+  2. MMR selection — ensures the final chunk set is diverse.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import threading
-from typing import TYPE_CHECKING
-
+import httpx
 import numpy as np
 
 from app.core.config import Settings
 from app.schemas.common import RetrievedChunk
-
-if TYPE_CHECKING:
-    from sentence_transformers import CrossEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -33,28 +22,13 @@ logger = logging.getLogger(__name__)
 class Reranker:
     """
     Cross-encoder reranker with optional MMR diversity selection.
-
-    The cross-encoder evaluates each (query, document) pair jointly,
-    achieving significantly higher precision than the bi-encoder used
-    for initial retrieval. This is the highest-ROI post-retrieval step.
+    Uses Hugging Face Serverless Inference API to save RAM.
     """
 
     def __init__(self, settings: Settings) -> None:
         self._model_name = settings.reranker_model_name
-        self._model: CrossEncoder | None = None
-        self._lock = threading.Lock()
-
-    def _get_model(self) -> CrossEncoder:
-        """Lazy-load the cross-encoder (double-check locking)."""
-        if self._model is None:
-            with self._lock:
-                if self._model is None:
-                    from sentence_transformers import CrossEncoder
-
-                    logger.info("Loading reranker model: %s", self._model_name)
-                    self._model = CrossEncoder(self._model_name)
-                    logger.info("Reranker model loaded successfully.")
-        return self._model
+        self._hf_token = settings.hf_token
+        self._api_url = f"https://api-inference.huggingface.co/models/{self._model_name}"
 
     # ── Reranking ────────────────────────────────────────────────
 
@@ -64,52 +38,63 @@ class Reranker:
         chunks: list[RetrievedChunk],
         top_k: int = 5,
     ) -> list[RetrievedChunk]:
-        """
-        Rerank chunks using the cross-encoder.
-
-        Args:
-            query: The search query.
-            chunks: Candidate chunks from hybrid retrieval.
-            top_k: Number of top results to return.
-
-        Returns:
-            Top-k chunks sorted by cross-encoder relevance score.
-        """
+        """Rerank chunks using Hugging Face Serverless API."""
         if not chunks:
             return []
 
         if len(chunks) <= top_k:
             return chunks
 
-        return await asyncio.to_thread(self._rerank_sync, query, chunks, top_k)
+        return await self._rerank_api(query, chunks, top_k)
 
-    def _rerank_sync(
+    async def _rerank_api(
         self,
         query: str,
         chunks: list[RetrievedChunk],
         top_k: int,
     ) -> list[RetrievedChunk]:
-        """Synchronous cross-encoder scoring with fallback."""
+        """Call Hugging Face Inference API to rerank pairs."""
+        if not self._hf_token:
+            logger.warning("No HF_TOKEN provided! Skipping reranking.")
+            return chunks[:top_k]
+
+        headers = {"Authorization": f"Bearer {self._hf_token}"}
+        # HF Inference API for sentence classification accepts text pairs
+        payload = {"inputs": [{"text": query, "text_pair": chunk.content} for chunk in chunks]}
+
         try:
-            model = self._get_model()
-            pairs = [[query, chunk.content] for chunk in chunks]
-            scores = model.predict(pairs, show_progress_bar=False)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(self._api_url, headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
 
-            scored = sorted(
-                zip(chunks, scores), key=lambda x: x[1], reverse=True
-            )
+                # HF returns a list of lists of dicts e.g. [[{'label': 'LABEL_0', 'score': 0.9}]]
+                # For cross-encoders, we take the primary score
+                scores = []
+                for res in data:
+                    if isinstance(res, list) and len(res) > 0 and 'score' in res[0]:
+                        scores.append(res[0]['score'])
+                    elif isinstance(res, dict) and 'score' in res:
+                        scores.append(res['score'])
+                    else:
+                        scores.append(0.0)
 
-            return [
-                RetrievedChunk(
-                    chunk_id=chunk.chunk_id,
-                    content=chunk.content,
-                    score=float(score),
-                    metadata=chunk.metadata,
-                )
-                for chunk, score in scored[:top_k]
-            ]
+                if len(scores) != len(chunks):
+                    raise ValueError("Score count does not match chunk count.")
+
+                scored = sorted(zip(chunks, scores), key=lambda x: x[1], reverse=True)
+
+                return [
+                    RetrievedChunk(
+                        chunk_id=chunk.chunk_id,
+                        content=chunk.content,
+                        score=float(score),
+                        metadata=chunk.metadata,
+                    )
+                    for chunk, score in scored[:top_k]
+                ]
         except Exception as exc:
-            logger.warning("Cross-encoder reranker unavailable (%s). Returning top candidate chunks.", exc)
+            logger.warning("HF Reranker API failed (%s). Returning un-reranked chunks.", exc)
             return chunks[:top_k]
 
     # ── Reranking + MMR ──────────────────────────────────────────

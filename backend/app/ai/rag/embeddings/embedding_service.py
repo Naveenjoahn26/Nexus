@@ -1,97 +1,82 @@
 """
-NEXUS EDU — Embedding Service.
+NEXUS EDU — Embedding Service (Serverless API Version).
 
-Wraps sentence-transformers with lazy model loading and async interface.
+Uses Hugging Face Serverless Inference API for embeddings to save RAM.
 Uses BAAI/bge-small-en-v1.5 by default (384 dimensions).
-
-Design decisions:
-  - Lazy loading: Model is loaded on first call, not at import time.
-    This keeps application startup fast and avoids loading the model
-    for routes that don't need embeddings.
-  - Thread-safe singleton: The model is loaded once and shared across
-    all requests via a double-check lock pattern.
-  - BGE query prefix: BGE models produce better retrieval embeddings
-    when queries include a task-specific prefix.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import threading
+import httpx
 from typing import TYPE_CHECKING
 
 from app.core.config import Settings
 from app.core.exceptions import EmbeddingError
 
-if TYPE_CHECKING:
-    from sentence_transformers import SentenceTransformer
-
 logger = logging.getLogger(__name__)
 
-# BGE models use this prefix to differentiate queries from documents.
-# This improves retrieval quality by ~2-3% on standard benchmarks.
 _BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
 
 class EmbeddingService:
     """
-    Thread-safe embedding service with lazy model loading.
-
-    The sentence-transformers model is loaded on first use and cached
-    for the lifetime of the process. All encoding is offloaded to a
-    thread pool to keep the async event loop responsive.
+    Embedding service using Hugging Face Serverless Inference API.
+    This keeps the backend RAM usage incredibly low by offloading the heavy ML model.
     """
 
     def __init__(self, settings: Settings) -> None:
         self._model_name = settings.embedding_model_name
-        self._batch_size = settings.embedding_batch_size
         self._dimension = settings.embedding_dimension
-        self._model: SentenceTransformer | None = None
-        self._lock = threading.Lock()
+        self._hf_token = settings.hf_token
+        self._api_url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self._model_name}"
+        
+        if not self._hf_token:
+            logger.warning("No HF_TOKEN provided! Embedding service will use local fallback only.")
 
     @property
     def dimension(self) -> int:
         """Embedding vector dimensionality."""
         return self._dimension
 
-    def _get_model(self) -> SentenceTransformer:
-        """Lazy-load the model on first use (double-check locking)."""
-        if self._model is None:
-            with self._lock:
-                if self._model is None:
-                    try:
-                        from sentence_transformers import SentenceTransformer
+    async def _embed_api(self, texts: list[str]) -> list[list[float]]:
+        """Call Hugging Face Inference API to get embeddings."""
+        if not self._hf_token:
+            return [self._fallback_embed(t) for t in texts]
 
-                        logger.info("Loading embedding model: %s", self._model_name)
-                        self._model = SentenceTransformer(self._model_name)
-                        logger.info("Embedding model loaded successfully.")
-                    except Exception as exc:
-                        raise EmbeddingError(
-                            f"Failed to load embedding model '{self._model_name}': {exc}"
-                        ) from exc
-        return self._model
+        headers = {"Authorization": f"Bearer {self._hf_token}"}
+        payload = {"inputs": texts}
 
-    def _embed_sync(self, texts: list[str]) -> list[list[float]]:
-        """Synchronous batch embedding with L2 normalization and RAM fallback."""
         try:
-            model = self._get_model()
-            embeddings = model.encode(
-                texts,
-                batch_size=self._batch_size,
-                show_progress_bar=False,
-                normalize_embeddings=True,
-            )
-            return embeddings.tolist()
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(self._api_url, headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                
+                # HF Inference API sometimes returns nested arrays depending on the model
+                # Ensure we return a flat list of floats per text
+                if isinstance(data, list) and len(data) > 0:
+                    if isinstance(data[0], list):
+                        # Some models return [batch_size, sequence_length, hidden_size]
+                        # For BGE, it usually returns [batch_size, hidden_size]
+                        # Let's handle both gracefully:
+                        if isinstance(data[0][0], list):
+                            # It's [batch, seq, hidden] -> pool by taking the first token (CLS) or mean
+                            return [[float(x) for x in seq[0]] for seq in data]
+                        else:
+                            return [[float(x) for x in seq] for seq in data]
+                
+                raise EmbeddingError("Unexpected response format from Hugging Face API.")
+
+        except httpx.HTTPError as exc:
+            logger.warning("HF API Error (%s). Using lightweight fallback embedder.", exc)
+            return [self._fallback_embed(t) for t in texts]
         except Exception as exc:
-            logger.warning(
-                "Primary embedding model unavailable or OOM (%s). Using lightweight fallback embedder.",
-                exc,
-            )
+            logger.warning("Unexpected embedding error (%s). Using fallback embedder.", exc)
             return [self._fallback_embed(t) for t in texts]
 
     def _fallback_embed(self, text: str) -> list[float]:
-        """Fast 384-dimensional deterministic feature vector for memory-constrained environments."""
+        """Fast 384-dimensional deterministic feature vector for missing API keys/failures."""
         import hashlib
         import math
 
@@ -105,49 +90,15 @@ class EmbeddingService:
         return [x / norm for x in vec]
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """
-        Embed a batch of document texts (no query prefix).
-
-        Args:
-            texts: List of text strings to embed.
-
-        Returns:
-            List of embedding vectors (each has `self.dimension` floats).
-
-        Raises:
-            EmbeddingError: If encoding fails.
-        """
+        """Embed a batch of document texts."""
         if not texts:
             return []
-
-        try:
-            return await asyncio.to_thread(self._embed_sync, texts)
-        except EmbeddingError:
-            raise
-        except Exception as exc:
-            raise EmbeddingError(f"Batch embedding failed: {exc}") from exc
+        return await self._embed_api(texts)
 
     async def embed_query(self, query: str) -> list[float]:
-        """
-        Embed a single query with the BGE retrieval prefix.
-
-        The prefix signals to the model that this is a search query,
-        improving retrieval relevance vs. treating it as a document.
-
-        Args:
-            query: The search query string.
-
-        Returns:
-            A single embedding vector.
-
-        Raises:
-            EmbeddingError: If encoding fails.
-        """
+        """Embed a single query with the BGE retrieval prefix."""
         prefixed = f"{_BGE_QUERY_PREFIX}{query}"
-        try:
-            results = await asyncio.to_thread(self._embed_sync, [prefixed])
+        results = await self._embed_api([prefixed])
+        if results and len(results) > 0:
             return results[0]
-        except EmbeddingError:
-            raise
-        except Exception as exc:
-            raise EmbeddingError(f"Query embedding failed: {exc}") from exc
+        raise EmbeddingError("Failed to generate query embedding.")
