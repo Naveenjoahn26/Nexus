@@ -1,16 +1,18 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
-const DEFAULT_BASE = "https://nexus-ai-b1gb.onrender.com";
+const DEFAULT_PROD_BASE = "https://nexus-ai-b1gb.onrender.com";
+const DEFAULT_DEV_BASE = "http://localhost:8000";
 
 export function getApiBase(): string {
   if (typeof window !== "undefined") {
     const stored = window.localStorage.getItem("nexus_api_base");
     if (stored) return stored.replace(/\/$/, "");
   }
+  const defaultFallback = import.meta.env.DEV ? DEFAULT_DEV_BASE : DEFAULT_PROD_BASE;
   const env =
     (import.meta.env.VITE_API_URL as string | undefined) ??
     (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-    DEFAULT_BASE;
+    defaultFallback;
   return env.replace(/\/$/, "");
 }
 

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -50,6 +51,18 @@ class Document(Base):
     )
     ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @hybrid_property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
+
+    @is_deleted.setter
+    def is_deleted(self, value: bool) -> None:
+        self.deleted_at = datetime.now(timezone.utc) if value else None
+
+    @is_deleted.expression
+    def is_deleted(cls):
+        return cls.deleted_at.is_not(None)
 
     # Relationships
     course: Mapped["Course"] = relationship("Course", back_populates="documents")  # noqa: F821

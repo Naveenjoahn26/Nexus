@@ -6,9 +6,6 @@ Handles user registration, login, and JWT token issuance.
 
 from __future__ import annotations
 
-import json
-import time
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -23,26 +20,6 @@ from app.schemas.api import StandardResponse, Token, UserCreate, UserRead
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-_DEBUG_LOG = Path(__file__).resolve().parents[4] / "debug-74d681.log"
-
-
-def _agent_log(hypothesis_id: str, location: str, message: str, data: dict) -> None:
-    # #region agent log
-    try:
-        payload = {
-            "sessionId": "74d681",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        with _DEBUG_LOG.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(payload) + "\n")
-    except Exception:
-        pass
-    # #endregion
-
 
 @router.post("/register", response_model=StandardResponse[UserRead])
 async def register(
@@ -50,35 +27,7 @@ async def register(
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
 ):
     """Register a new user."""
-    # #region agent log
-    _agent_log(
-        "C",
-        "auth.py:register:entry",
-        "register called",
-        {"email": user_in.email, "passwordLen": len(user_in.password), "fullNameLen": len(user_in.full_name)},
-    )
-    # #endregion
-    try:
-        existing_user = await user_repo.get_by_email(user_in.email)
-        # #region agent log
-        _agent_log(
-            "B",
-            "auth.py:register:after_email_lookup",
-            "duplicate check completed",
-            {"email": user_in.email, "existingUser": existing_user is not None},
-        )
-        # #endregion
-    except Exception as exc:
-        # #region agent log
-        _agent_log(
-            "A",
-            "auth.py:register:email_lookup_error",
-            "database query failed during duplicate check",
-            {"email": user_in.email, "errorType": type(exc).__name__, "error": str(exc)[:500]},
-        )
-        # #endregion
-        raise
-
+    existing_user = await user_repo.get_by_email(user_in.email)
     if existing_user:
         raise ResourceConflictError("Email already registered")
 
@@ -87,27 +36,8 @@ async def register(
         full_name=user_in.full_name,
         hashed_password=get_password_hash(user_in.password),
     )
-    try:
-        user = await user_repo.create(user)
-        await user_repo._session.refresh(user)
-        # #region agent log
-        _agent_log(
-            "B",
-            "auth.py:register:success",
-            "user created",
-            {"userId": str(user.id), "email": user.email},
-        )
-        # #endregion
-    except Exception as exc:
-        # #region agent log
-        _agent_log(
-            "B",
-            "auth.py:register:create_error",
-            "user insert failed",
-            {"email": user_in.email, "errorType": type(exc).__name__, "error": str(exc)[:500]},
-        )
-        # #endregion
-        raise
+    user = await user_repo.create(user)
+    await user_repo._session.refresh(user)
 
     return StandardResponse(data=UserRead.model_validate(user))
 

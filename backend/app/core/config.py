@@ -9,18 +9,33 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pathlib import Path
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ENV_FILE = str(Path(__file__).resolve().parents[2] / ".env")
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(_ENV_FILE, ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
     )
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def _coerce_debug(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "release", "prod"}:
+                return False
+        return value
 
     # ── Application ──────────────────────────────────────────────
     app_name: str = "NEXUS_EDU"
@@ -31,37 +46,53 @@ class Settings(BaseSettings):
 
     # ── CORS ────────────────────────────────────────────────────
     cors_origins: str | list[str] = [
+        "https://nexus-ai-b1gb.onrender.com",
+        "https://nexus-ai-1-b1gb.onrender.com",
         "https://nexus-ai-1-cmi1.onrender.com",
         "https://nexus-ai-a1-cmi1.onrender.com",
         "https://nexus-ai-silk-ten.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://[::1]:5173",
+        "http://[::1]:3000",
     ]
+    cors_origin_regex: str = r"^https?://([a-zA-Z0-9-]+\.)*(localhost|127\.0\.0\.1|\[::1\]|onrender\.com|vercel\.app)(:\d+)?$"
 
     def get_cors_origins(self) -> list[str]:
         defaults = [
+            "https://nexus-ai-b1gb.onrender.com",
+            "https://nexus-ai-1-b1gb.onrender.com",
             "https://nexus-ai-1-cmi1.onrender.com",
             "https://nexus-ai-a1-cmi1.onrender.com",
             "https://nexus-ai-silk-ten.vercel.app",
             "http://localhost:5173",
             "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
             "http://localhost:3000",
             "http://127.0.0.1:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "http://[::1]:5173",
+            "http://[::1]:3000",
         ]
+        origins = list(defaults)
+        raw_list: list[str] = []
         if isinstance(self.cors_origins, str):
-            extra = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-            for item in extra:
-                if item not in defaults:
-                    defaults.append(item)
-            return defaults
+            raw_list = [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
         elif isinstance(self.cors_origins, list):
-            for item in self.cors_origins:
-                if item not in defaults:
-                    defaults.append(item)
-            return defaults
-        return defaults
+            raw_list = [o.strip().rstrip("/") if isinstance(o, str) else str(o) for o in self.cors_origins]
+
+        for item in raw_list:
+            if item and item not in origins:
+                origins.append(item)
+        return origins
 
     # ── LLM Providers ───────────────────────────────────────────
     groq_api_key: str = ""
@@ -88,9 +119,9 @@ class Settings(BaseSettings):
 
     # ── LLM Core (AI Router & Groq) ──────────────────────────────
     # Models mapped to specific AI Router roles
-    llm_model_metadata: str = "llama-3.3-70b-versatile"
-    llm_model_json: str = "llama-3.3-70b-versatile"
-    llm_model_content: str = "llama-3.3-70b-versatile"
+    llm_model_metadata: str = "qwen/qwen3.8-27b"
+    llm_model_json: str = "qwen/qwen3.8-27b"
+    llm_model_content: str = "qwen/qwen3.8-27b"
     
     # Instructor retry limit for malformed Pydantic responses
     llm_max_retries: int = 3
@@ -103,9 +134,9 @@ class Settings(BaseSettings):
 
     # ── Database ────────────────────────────────────────────────
     # Async URL — used by SQLAlchemy async engine (FastAPI, services)
-    database_url: str = "postgresql+asyncpg://postgres:nimal@localhost:5432/NexusAI"
+    database_url: str = "postgresql+asyncpg://postgres:12345@localhost:5432/nexus"
     # Sync URL — used only by Alembic for schema migrations
-    database_url_sync: str = "postgresql+psycopg2://postgres:nimal@localhost:5432/NexusAI"
+    database_url_sync: str = "postgresql+psycopg2://postgres:12345@localhost:5432/nexus"
     # Connection pool settings
     db_pool_size: int = 10
     db_max_overflow: int = 20
